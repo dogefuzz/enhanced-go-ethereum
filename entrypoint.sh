@@ -1,4 +1,7 @@
 #!/bin/sh
+
+NETWORK_ID=${CHAIN_ID:-'1900'}
+
 geth \
     --fast \
     --identity "TestNode2" \
@@ -9,7 +12,7 @@ geth \
     --port "30303" \
     --nodiscover  \
     --rpcapi "db,eth,net,web3,miner,net,personal,net,txpool,admin" \
-    --networkid 1900 \
+    --networkid $NETWORK_ID \
     --datadir $ENVIRONMENT_FOLDER \
     --nat "any" \
     --targetgaslimit "9000000000000" \
