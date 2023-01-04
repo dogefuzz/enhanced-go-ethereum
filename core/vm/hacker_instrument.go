@@ -63,7 +63,7 @@ func (r executionRegistry) SendRegistriesToFuzzer() {
 	if fuzzerPort == "" {
 		fuzzerPort = "8888"
 	}
-	url := fmt.Sprintf("http://%s:%s/instrument/execution", fuzzerHost, fuzzerPort)
+	url := fmt.Sprintf("http://%s:%s/transactions/executions", fuzzerHost, fuzzerPort)
 
 	request := InstrumentRequest{
 		Name:         r.name,
@@ -74,10 +74,12 @@ func (r executionRegistry) SendRegistriesToFuzzer() {
 	data, err := json.Marshal(request)
 	if err != nil {
 		log.Printf("Error Occurred. %+v", err)
+		return
 	}
 	res, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		log.Printf("Error Occurred. %+v", err)
+		return
 	}
 	log.Printf("Sending execution log: %s", res.Status)
 }

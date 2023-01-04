@@ -304,7 +304,7 @@ func (call *HackerContractCall) OnCalldataLoad() {
 	call.StateStack.push(newHackerState(call.caller, call.callee))
 }
 
-//Memory,Storage operation
+// Memory,Storage operation
 func (call *HackerContractCall) OnMload() {
 	call.OperationStack.push(opCodeToString[MLOAD])
 	call.StateStack.push(newHackerState(call.caller, call.callee))
@@ -322,7 +322,7 @@ func (call *HackerContractCall) OnSstore() {
 	call.StateStack.push(newHackerState(call.caller, call.callee))
 }
 
-//Jump statement, Jump to existing function position, or Jump to the invalid to invoke a error throw.
+// Jump statement, Jump to existing function position, or Jump to the invalid to invoke a error throw.
 func (call *HackerContractCall) OnJumpi() {
 	call.OperationStack.push(opCodeToString[JUMPI])
 	call.StateStack.push(newHackerState(call.caller, call.callee))
@@ -546,7 +546,7 @@ func hacker_close(txHash string) {
 			fuzzerPort = "8888"
 		}
 		// url := fmt.Sprintf("http://%s:%s/hack?%s", fuzzerHost, fuzzerPort, values.Encode())
-		url := fmt.Sprintf("http://%s:%s/instrument/weakness", fuzzerHost, fuzzerPort)
+		url := fmt.Sprintf("http://%s:%s/transactions/weaknesses", fuzzerHost, fuzzerPort)
 		log.Printf("Calling %s\n", url)
 
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(json_data))
