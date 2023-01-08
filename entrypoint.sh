@@ -69,11 +69,11 @@ echo "$AGENT_WALLET_PRIVATE_KEY" > agent.pkey
 echo "[2] Initializing first accounts for this node"
 
 echo "[2.1] Importing node key"
-geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt node.pkey
+geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt node.pkey 2> /dev/null
 echo "[2.1] Importing deployer key"
-geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt deployer.pkey
+geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt deployer.pkey 2> /dev/null
 echo "[2.1] Importing agent key"
-geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt agent.pkey
+geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt agent.pkey 2> /dev/null
 geth init --datadir $ENV_FOLDER genesis.json
 
 echo "[3] Initializing node"

@@ -18,7 +18,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -447,20 +446,11 @@ func hacker_close(txHash string) {
 		hacker_call_stack = nil
 		hacker_call_hashs = nil
 		hacker_calls = nil
-		Println("hacker_closed!")
-		if err := recover(); err != nil {
-			Println(err) // 这里的err其实就是panic传入的内容，55
-			for i := 0; i < 10; i++ {
-				funcName, file, line, ok := runtime.Caller(i)
-				if ok {
-					Printf("frame %v:[func:%v,file:%v,line:%v]\n", i, runtime.FuncForPC(funcName).Name(), file, line)
-				}
-			}
-		}
-
+		log.Println("hacker_closed!")
 	}()
+
 	if hacker_env != nil || hacker_call_stack != nil {
-		Println("hacker_close...")
+		log.Println("hacker_close...")
 
 		for hacker_call_stack.len() > 0 {
 			call := hacker_call_stack.pop()
@@ -479,9 +469,7 @@ func hacker_close(txHash string) {
 			hacker_call_hashs = hacker_call_hashs[root:]
 			hacker_calls = hacker_calls[root:]
 		}
-		//Set check oracles
-		//with hacker_call_hashs,and hacker_calls as input,different test oracles are checked
-		//in different way separetely.
+
 		oracles := make([]Oracle, 0, 0)
 		oracles = append(oracles, NewHackerReentrancy())
 		oracles = append(oracles, NewHackerCallEtherTransferFailed())
@@ -507,14 +495,6 @@ func hacker_close(txHash string) {
 				features = append(features, oracle.String())
 			}
 		}
-
-		// Send the oracle and profile reports from one transaction or one contract call more precisely.
-		// to FuzzerReporter outside, whose listening port is on "http://localhost:8888/hack"
-		// features_str, _ := json.Marshal(features)
-		// values := url.Values{
-		// 	"oracles": {string(features_str)},
-		// 	"profile":    {GetReportor().Profile(hacker_call_hashs, hacker_calls)},
-		// }
 		// values.Add("txHash", txHash)
 
 		values := InstrumentWeaknessRequest{
@@ -534,7 +514,7 @@ func hacker_close(txHash string) {
 		}
 		json_data, err := json.Marshal(values)
 		if err != nil {
-			log.Println("Error Occured. %+v", err)
+			log.Println("error occured: %+v", err)
 		}
 
 		fuzzerHost := os.Getenv("FUZZER_HOST")
@@ -551,18 +531,10 @@ func hacker_close(txHash string) {
 
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(json_data))
 		if err != nil {
-			log.Println("Error Occured. %+v", err)
+			log.Println("error occured: %v", err)
+			return
 		}
 		defer resp.Body.Close()
-
-		// if req, err := http.NewRequest("GET", url, nil); err != nil {
-		// 	log.Println("Error Occured. %+v", err)
-		// } else {
-		// 	if response, err := Client.Do(req); err != nil {
-		// 		log.Println("Error sending request to API endpoint. %+v", err)
-		// 	} else {
-		// 		defer response.Body.Close()
-		// 	}
-		// }
+		log.Printf("oracle call finished with status: %d", resp.StatusCode)
 	}
 }

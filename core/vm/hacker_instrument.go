@@ -81,5 +81,6 @@ func (r executionRegistry) SendRegistriesToFuzzer() {
 		log.Printf("Error Occurred. %+v", err)
 		return
 	}
+	defer res.Body.Close()
 	log.Printf("Sending execution log: %s", res.Status)
 }
