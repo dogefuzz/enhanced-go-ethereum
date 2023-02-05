@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
 )
 
 type InstrumentRequest struct {
@@ -29,25 +28,13 @@ type executionRegistry struct {
 	instructions []uint64
 }
 
-var lock = &sync.Mutex{}
-var instance *executionRegistry
-
 func GetRegistryInstance(contractName string, input string, txHash string) *executionRegistry {
-	if instance == nil {
-		lock.Lock()
-		defer lock.Unlock()
-
-		if instance == nil {
-			instance = &executionRegistry{
-				name:         contractName,
-				input:        input,
-				txHash:       txHash,
-				instructions: make([]uint64, 0, 3),
-			}
-		}
+	return &executionRegistry{
+		name:         contractName,
+		input:        input,
+		txHash:       txHash,
+		instructions: make([]uint64, 0, 3),
 	}
-
-	return instance
 }
 
 func (r *executionRegistry) Register(pc uint64) {
@@ -63,8 +50,9 @@ func (r executionRegistry) SendRegistriesToFuzzer() {
 	if fuzzerPort == "" {
 		fuzzerPort = "8888"
 	}
-	url := fmt.Sprintf("http://%s:%s/transactions/executions", fuzzerHost, fuzzerPort)
 
+	log.Printf("sending execution instrumnetation fo transaction hash: %s", r.txHash)
+	url := fmt.Sprintf("http://%s:%s/transactions/executions", fuzzerHost, fuzzerPort)
 	request := InstrumentRequest{
 		Name:         r.name,
 		Input:        r.input,
