@@ -41,7 +41,7 @@ func (r *executionRegistry) Register(pc uint64) {
 	r.instructions = append(r.instructions, pc)
 }
 
-func (r executionRegistry) SendRegistriesToFuzzer() {
+func (r *executionRegistry) SendRegistriesToFuzzer() {
 	fuzzerHost := os.Getenv("FUZZER_HOST")
 	if fuzzerHost == "" {
 		fuzzerHost = "localhost"
@@ -51,7 +51,6 @@ func (r executionRegistry) SendRegistriesToFuzzer() {
 		fuzzerPort = "8888"
 	}
 
-	log.Printf("sending execution instrumnetation fo transaction hash: %s", r.txHash)
 	url := fmt.Sprintf("http://%s:%s/transactions/executions", fuzzerHost, fuzzerPort)
 	request := InstrumentRequest{
 		Name:         r.name,
