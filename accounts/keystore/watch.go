@@ -14,7 +14,8 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-// +build darwin,!ios freebsd linux,!arm64 netbsd solaris
+//go:build (darwin && !ios && cgo) || freebsd || (linux && !arm64) || netbsd || solaris
+// +build darwin,!ios,cgo freebsd linux,!arm64 netbsd solaris
 
 package keystore
 
@@ -22,24 +23,26 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/rjeczalik/notify"
+	"github.com/fsnotify/fsnotify"
 )
 
 type watcher struct {
 	ac       *accountCache
-	starting bool
-	running  bool
-	ev       chan notify.EventInfo
+	running  bool // set to true when runloop begins
+	runEnded bool // set to true when runloop ends
+	starting bool // set to true prior to runloop starting
 	quit     chan struct{}
 }
 
 func newWatcher(ac *accountCache) *watcher {
 	return &watcher{
 		ac:   ac,
-		ev:   make(chan notify.EventInfo, 10),
 		quit: make(chan struct{}),
 	}
 }
+
+// enabled returns false on systems not supported.
+func (*watcher) enabled() bool { return true }
 
 // starts the watcher loop in the background.
 // Start a watcher in the background if that's not already in progress.
@@ -61,17 +64,24 @@ func (w *watcher) loop() {
 		w.ac.mu.Lock()
 		w.running = false
 		w.starting = false
+		w.runEnded = true
 		w.ac.mu.Unlock()
 	}()
 	logger := log.New("path", w.ac.keydir)
 
-	if err := notify.Watch(w.ac.keydir, w.ev, notify.All); err != nil {
-		logger.Trace("Failed to watch keystore folder", "err", err)
+	// Create new watcher.
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Error("Failed to start filesystem watcher", "err", err)
 		return
 	}
-	defer notify.Stop(w.ev)
+	defer watcher.Close()
+	if err := watcher.Add(w.ac.keydir); err != nil {
+		logger.Warn("Failed to watch keystore folder", "err", err)
+		return
+	}
 
-	logger.Trace("Started watching keystore folder")
+	logger.Trace("Started watching keystore folder", "folder", w.ac.keydir)
 	defer logger.Trace("Stopped watching keystore folder")
 
 	w.ac.mu.Lock()
@@ -82,32 +92,40 @@ func (w *watcher) loop() {
 	// When an event occurs, the reload call is delayed a bit so that
 	// multiple events arriving quickly only cause a single reload.
 	var (
-		debounce          = time.NewTimer(0)
-		debounceDuration  = 500 * time.Millisecond
-		inCycle, hadEvent bool
+		debounceDuration = 500 * time.Millisecond
+		rescanTriggered  = false
+		debounce         = time.NewTimer(0)
 	)
+	// Ignore initial trigger
+	if !debounce.Stop() {
+		<-debounce.C
+	}
 	defer debounce.Stop()
 	for {
 		select {
 		case <-w.quit:
 			return
-		case <-w.ev:
-			if !inCycle {
-				debounce.Reset(debounceDuration)
-				inCycle = true
-			} else {
-				hadEvent = true
+		case _, ok := <-watcher.Events:
+			if !ok {
+				return
 			}
+			// Trigger the scan (with delay), if not already triggered
+			if !rescanTriggered {
+				debounce.Reset(debounceDuration)
+				rescanTriggered = true
+			}
+			// The fsnotify library does provide more granular event-info, it
+			// would be possible to refresh individual affected files instead
+			// of scheduling a full rescan. For most cases though, the
+			// full rescan is quick and obviously simplest.
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Info("Filsystem watcher error", "err", err)
 		case <-debounce.C:
-			w.ac.mu.Lock()
-			w.ac.reload()
-			w.ac.mu.Unlock()
-			if hadEvent {
-				debounce.Reset(debounceDuration)
-				inCycle, hadEvent = true, false
-			} else {
-				inCycle, hadEvent = false, false
-			}
+			w.ac.scanAccounts()
+			rescanTriggered = false
 		}
 	}
 }

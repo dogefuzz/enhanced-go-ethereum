@@ -1,122 +1,204 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Go port of Coda Hale's Metrics library
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+// <https://github.com/rcrowley/go-metrics>
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
-// Package metrics provides general system and process level metrics collection.
+// Coda Hale's original work: <https://github.com/codahale/metrics>
 package metrics
 
 import (
 	"os"
-	"runtime"
+	"runtime/metrics"
+	"runtime/pprof"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/rcrowley/go-metrics"
-	"github.com/rcrowley/go-metrics/exp"
 )
 
-// MetricsEnabledFlag is the CLI flag name to use to enable metrics collections.
-var MetricsEnabledFlag = "metrics"
-
-// Enabled is the flag specifying if metrics are enable or not.
+// Enabled is checked by the constructor functions for all of the
+// standard metrics. If it is true, the metric returned is a stub.
+//
+// This global kill-switch helps quantify the observer effect and makes
+// for less cluttered pprof profiles.
 var Enabled = false
+
+// EnabledExpensive is a soft-flag meant for external packages to check if costly
+// metrics gathering is allowed or not. The goal is to separate standard metrics
+// for health monitoring and debug metrics that might impact runtime performance.
+var EnabledExpensive = false
+
+// enablerFlags is the CLI flag names to use to enable metrics collections.
+var enablerFlags = []string{"metrics"}
+
+// expensiveEnablerFlags is the CLI flag names to use to enable metrics collections.
+var expensiveEnablerFlags = []string{"metrics.expensive"}
 
 // Init enables or disables the metrics system. Since we need this to run before
 // any other code gets to create meters and timers, we'll actually do an ugly hack
 // and peek into the command line args for the metrics flag.
 func init() {
 	for _, arg := range os.Args {
-		if strings.TrimLeft(arg, "-") == MetricsEnabledFlag {
-			log.Info("Enabling metrics collection")
-			Enabled = true
+		flag := strings.TrimLeft(arg, "-")
+
+		for _, enabler := range enablerFlags {
+			if !Enabled && flag == enabler {
+				log.Info("Enabling metrics collection")
+				Enabled = true
+			}
+		}
+		for _, enabler := range expensiveEnablerFlags {
+			if !EnabledExpensive && flag == enabler {
+				log.Info("Enabling expensive metrics collection")
+				EnabledExpensive = true
+			}
 		}
 	}
-	exp.Exp(metrics.DefaultRegistry)
 }
 
-// NewCounter create a new metrics Counter, either a real one of a NOP stub depending
-// on the metrics flag.
-func NewCounter(name string) metrics.Counter {
-	if !Enabled {
-		return new(metrics.NilCounter)
+var threadCreateProfile = pprof.Lookup("threadcreate")
+
+type runtimeStats struct {
+	GCPauses     *metrics.Float64Histogram
+	GCAllocBytes uint64
+	GCFreedBytes uint64
+
+	MemTotal     uint64
+	HeapObjects  uint64
+	HeapFree     uint64
+	HeapReleased uint64
+	HeapUnused   uint64
+
+	Goroutines   uint64
+	SchedLatency *metrics.Float64Histogram
+}
+
+var runtimeSamples = []metrics.Sample{
+	{Name: "/gc/pauses:seconds"}, // histogram
+	{Name: "/gc/heap/allocs:bytes"},
+	{Name: "/gc/heap/frees:bytes"},
+	{Name: "/memory/classes/total:bytes"},
+	{Name: "/memory/classes/heap/objects:bytes"},
+	{Name: "/memory/classes/heap/free:bytes"},
+	{Name: "/memory/classes/heap/released:bytes"},
+	{Name: "/memory/classes/heap/unused:bytes"},
+	{Name: "/sched/goroutines:goroutines"},
+	{Name: "/sched/latencies:seconds"}, // histogram
+}
+
+func readRuntimeStats(v *runtimeStats) {
+	metrics.Read(runtimeSamples)
+	for _, s := range runtimeSamples {
+		// Skip invalid/unknown metrics. This is needed because some metrics
+		// are unavailable in older Go versions, and attempting to read a 'bad'
+		// metric panics.
+		if s.Value.Kind() == metrics.KindBad {
+			continue
+		}
+
+		switch s.Name {
+		case "/gc/pauses:seconds":
+			v.GCPauses = s.Value.Float64Histogram()
+		case "/gc/heap/allocs:bytes":
+			v.GCAllocBytes = s.Value.Uint64()
+		case "/gc/heap/frees:bytes":
+			v.GCFreedBytes = s.Value.Uint64()
+		case "/memory/classes/total:bytes":
+			v.MemTotal = s.Value.Uint64()
+		case "/memory/classes/heap/objects:bytes":
+			v.HeapObjects = s.Value.Uint64()
+		case "/memory/classes/heap/free:bytes":
+			v.HeapFree = s.Value.Uint64()
+		case "/memory/classes/heap/released:bytes":
+			v.HeapReleased = s.Value.Uint64()
+		case "/memory/classes/heap/unused:bytes":
+			v.HeapUnused = s.Value.Uint64()
+		case "/sched/goroutines:goroutines":
+			v.Goroutines = s.Value.Uint64()
+		case "/sched/latencies:seconds":
+			v.SchedLatency = s.Value.Float64Histogram()
+		}
 	}
-	return metrics.GetOrRegisterCounter(name, metrics.DefaultRegistry)
 }
 
-// NewMeter create a new metrics Meter, either a real one of a NOP stub depending
-// on the metrics flag.
-func NewMeter(name string) metrics.Meter {
-	if !Enabled {
-		return new(metrics.NilMeter)
-	}
-	return metrics.GetOrRegisterMeter(name, metrics.DefaultRegistry)
-}
-
-// NewTimer create a new metrics Timer, either a real one of a NOP stub depending
-// on the metrics flag.
-func NewTimer(name string) metrics.Timer {
-	if !Enabled {
-		return new(metrics.NilTimer)
-	}
-	return metrics.GetOrRegisterTimer(name, metrics.DefaultRegistry)
-}
-
-// CollectProcessMetrics periodically collects various metrics about the running
-// process.
+// CollectProcessMetrics periodically collects various metrics about the running process.
 func CollectProcessMetrics(refresh time.Duration) {
 	// Short circuit if the metrics system is disabled
 	if !Enabled {
 		return
 	}
+
+	refreshFreq := int64(refresh / time.Second)
+
 	// Create the various data collectors
-	memstats := make([]*runtime.MemStats, 2)
-	diskstats := make([]*DiskStats, 2)
-	for i := 0; i < len(memstats); i++ {
-		memstats[i] = new(runtime.MemStats)
-		diskstats[i] = new(DiskStats)
-	}
+	var (
+		cpustats  = make([]CPUStats, 2)
+		diskstats = make([]DiskStats, 2)
+		rstats    = make([]runtimeStats, 2)
+	)
+
+	// This scale factor is used for the runtime's time metrics. It's useful to convert to
+	// ns here because the runtime gives times in float seconds, but runtimeHistogram can
+	// only provide integers for the minimum and maximum values.
+	const secondsToNs = float64(time.Second)
+
 	// Define the various metrics to collect
-	memAllocs := metrics.GetOrRegisterMeter("system/memory/allocs", metrics.DefaultRegistry)
-	memFrees := metrics.GetOrRegisterMeter("system/memory/frees", metrics.DefaultRegistry)
-	memInuse := metrics.GetOrRegisterMeter("system/memory/inuse", metrics.DefaultRegistry)
-	memPauses := metrics.GetOrRegisterMeter("system/memory/pauses", metrics.DefaultRegistry)
+	var (
+		cpuSysLoad            = GetOrRegisterGauge("system/cpu/sysload", DefaultRegistry)
+		cpuSysWait            = GetOrRegisterGauge("system/cpu/syswait", DefaultRegistry)
+		cpuProcLoad           = GetOrRegisterGauge("system/cpu/procload", DefaultRegistry)
+		cpuThreads            = GetOrRegisterGauge("system/cpu/threads", DefaultRegistry)
+		cpuGoroutines         = GetOrRegisterGauge("system/cpu/goroutines", DefaultRegistry)
+		cpuSchedLatency       = getOrRegisterRuntimeHistogram("system/cpu/schedlatency", secondsToNs, nil)
+		memPauses             = getOrRegisterRuntimeHistogram("system/memory/pauses", secondsToNs, nil)
+		memAllocs             = GetOrRegisterMeter("system/memory/allocs", DefaultRegistry)
+		memFrees              = GetOrRegisterMeter("system/memory/frees", DefaultRegistry)
+		memTotal              = GetOrRegisterGauge("system/memory/held", DefaultRegistry)
+		heapUsed              = GetOrRegisterGauge("system/memory/used", DefaultRegistry)
+		heapObjects           = GetOrRegisterGauge("system/memory/objects", DefaultRegistry)
+		diskReads             = GetOrRegisterMeter("system/disk/readcount", DefaultRegistry)
+		diskReadBytes         = GetOrRegisterMeter("system/disk/readdata", DefaultRegistry)
+		diskReadBytesCounter  = GetOrRegisterCounter("system/disk/readbytes", DefaultRegistry)
+		diskWrites            = GetOrRegisterMeter("system/disk/writecount", DefaultRegistry)
+		diskWriteBytes        = GetOrRegisterMeter("system/disk/writedata", DefaultRegistry)
+		diskWriteBytesCounter = GetOrRegisterCounter("system/disk/writebytes", DefaultRegistry)
+	)
 
-	var diskReads, diskReadBytes, diskWrites, diskWriteBytes metrics.Meter
-	if err := ReadDiskStats(diskstats[0]); err == nil {
-		diskReads = metrics.GetOrRegisterMeter("system/disk/readcount", metrics.DefaultRegistry)
-		diskReadBytes = metrics.GetOrRegisterMeter("system/disk/readdata", metrics.DefaultRegistry)
-		diskWrites = metrics.GetOrRegisterMeter("system/disk/writecount", metrics.DefaultRegistry)
-		diskWriteBytes = metrics.GetOrRegisterMeter("system/disk/writedata", metrics.DefaultRegistry)
-	} else {
-		log.Debug("Failed to read disk metrics", "err", err)
-	}
-	// Iterate loading the different stats and updating the meters
-	for i := 1; ; i++ {
-		runtime.ReadMemStats(memstats[i%2])
-		memAllocs.Mark(int64(memstats[i%2].Mallocs - memstats[(i-1)%2].Mallocs))
-		memFrees.Mark(int64(memstats[i%2].Frees - memstats[(i-1)%2].Frees))
-		memInuse.Mark(int64(memstats[i%2].Alloc - memstats[(i-1)%2].Alloc))
-		memPauses.Mark(int64(memstats[i%2].PauseTotalNs - memstats[(i-1)%2].PauseTotalNs))
+	// Iterate loading the different stats and updating the meters.
+	now, prev := 0, 1
+	for ; ; now, prev = prev, now {
+		// CPU
+		ReadCPUStats(&cpustats[now])
+		cpuSysLoad.Update((cpustats[now].GlobalTime - cpustats[prev].GlobalTime) / refreshFreq)
+		cpuSysWait.Update((cpustats[now].GlobalWait - cpustats[prev].GlobalWait) / refreshFreq)
+		cpuProcLoad.Update((cpustats[now].LocalTime - cpustats[prev].LocalTime) / refreshFreq)
 
-		if ReadDiskStats(diskstats[i%2]) == nil {
-			diskReads.Mark(int64(diskstats[i%2].ReadCount - diskstats[(i-1)%2].ReadCount))
-			diskReadBytes.Mark(int64(diskstats[i%2].ReadBytes - diskstats[(i-1)%2].ReadBytes))
-			diskWrites.Mark(int64(diskstats[i%2].WriteCount - diskstats[(i-1)%2].WriteCount))
-			diskWriteBytes.Mark(int64(diskstats[i%2].WriteBytes - diskstats[(i-1)%2].WriteBytes))
+		// Threads
+		cpuThreads.Update(int64(threadCreateProfile.Count()))
+
+		// Go runtime metrics
+		readRuntimeStats(&rstats[now])
+
+		cpuGoroutines.Update(int64(rstats[now].Goroutines))
+		cpuSchedLatency.update(rstats[now].SchedLatency)
+		memPauses.update(rstats[now].GCPauses)
+
+		memAllocs.Mark(int64(rstats[now].GCAllocBytes - rstats[prev].GCAllocBytes))
+		memFrees.Mark(int64(rstats[now].GCFreedBytes - rstats[prev].GCFreedBytes))
+
+		memTotal.Update(int64(rstats[now].MemTotal))
+		heapUsed.Update(int64(rstats[now].MemTotal - rstats[now].HeapUnused - rstats[now].HeapFree - rstats[now].HeapReleased))
+		heapObjects.Update(int64(rstats[now].HeapObjects))
+
+		// Disk
+		if ReadDiskStats(&diskstats[now]) == nil {
+			diskReads.Mark(diskstats[now].ReadCount - diskstats[prev].ReadCount)
+			diskReadBytes.Mark(diskstats[now].ReadBytes - diskstats[prev].ReadBytes)
+			diskWrites.Mark(diskstats[now].WriteCount - diskstats[prev].WriteCount)
+			diskWriteBytes.Mark(diskstats[now].WriteBytes - diskstats[prev].WriteBytes)
+			diskReadBytesCounter.Inc(diskstats[now].ReadBytes - diskstats[prev].ReadBytes)
+			diskWriteBytesCounter.Inc(diskstats[now].WriteBytes - diskstats[prev].WriteBytes)
 		}
+
 		time.Sleep(refresh)
 	}
 }
