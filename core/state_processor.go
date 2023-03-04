@@ -99,7 +99,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 func applyTransaction(msg types.Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
 	// Create a new context to be used in the EVM environment.
-	txContext := NewEVMTxContext(msg, evm.TxContext.Hacker_TxHash)
+	txContext := NewEVMTxContext(msg, tx.Hash().Hex())
 	evm.Reset(txContext, statedb)
 
 	// Apply the transaction to the current state (included in the env).
