@@ -2,12 +2,14 @@ package vm
 
 var times = 0
 
-/**
-  hacker_instruction.go, list the instruction opXXX which will be recorded and analyzed later
-*/
-type opFunc func(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error)
+/*
+*
 
-func Hacker_record(op OpCode, fun opFunc, pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	hacker_instruction.go, list the instruction opXXX which will be recorded and analyzed later
+*/
+type opFunc func(pc *uint64, in *EVMInterpreter, callContext *ScopeContext) ([]byte, error)
+
+func Hacker_record(op OpCode, fun opFunc, pc *uint64, in *EVMInterpreter, callContext *ScopeContext) ([]byte, error) {
 
 	if hacker_call_stack != nil {
 		call := hacker_call_stack.peek()
@@ -37,8 +39,8 @@ func Hacker_record(op OpCode, fun opFunc, pc *uint64, evm *EVM, contract *Contra
 				call.OnRelationOp(OR)
 			case XOR:
 				call.OnRelationOp(XOR)
-			case SHA3:
-				call.OnSha3()
+			case KECCAK256:
+				call.OnKECCAK256()
 			case CALLER:
 				call.OnCaller()
 			case ORIGIN:
@@ -86,5 +88,5 @@ func Hacker_record(op OpCode, fun opFunc, pc *uint64, evm *EVM, contract *Contra
 			}
 		}
 	}
-	return fun(pc, evm, contract, memory, stack)
+	return fun(pc, in, callContext)
 }

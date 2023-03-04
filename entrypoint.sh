@@ -78,22 +78,23 @@ geth init --datadir $ENV_FOLDER genesis.json
 
 echo "[3] Initializing node"
 geth \
-    --fast \
+    --syncmode "snap" \
     --identity "TestNode2" \
-    --rpc \
-    -rpcaddr "0.0.0.0" \
-    --rpcport "8545" \
-    --rpccorsdomain "*" \
+    --http \
+    --http.addr "0.0.0.0" \
+    --http.port "8545" \
+    --http.corsdomain "*" \
+    --http.api "db,eth,net,web3,miner,net,personal,net,txpool,admin" \
     --port "30303" \
     --nodiscover  \
-    --rpcapi "db,eth,net,web3,miner,net,personal,net,txpool,admin" \
     --networkid $NETWORK_ID \
     --datadir $ENV_FOLDER \
     --nat "any" \
-    --targetgaslimit "$GAS_LIMIT" \
+    --dev.gaslimit "$GAS_LIMIT" \
+    --dev \
+    --allow-insecure-unlock \
     --unlock $NODE_WALLET_ADDRESS \
     --password "$ENV_FOLDER/pwd.txt" \
-    --etherbase $NODE_WALLET_ADDRESS \
     --mine
 
 echo "[4] Unlocking accounts"

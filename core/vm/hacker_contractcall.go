@@ -266,8 +266,8 @@ func (call *HackerContractCall) OnRelationOp(relation OpCode) {
 	call.OperationStack.push(opCodeToString[relation])
 	call.StateStack.push(newHackerState(call.caller, call.callee))
 }
-func (call *HackerContractCall) OnSha3() {
-	call.OperationStack.push(opCodeToString[SHA3])
+func (call *HackerContractCall) OnKECCAK256() {
+	call.OperationStack.push(opCodeToString[KECCAK256])
 	call.StateStack.push(newHackerState(call.caller, call.callee))
 }
 func (call *HackerContractCall) OnCreate() {
@@ -411,8 +411,8 @@ func (st *HackerContractCallStack) Print() {
 func hacker_init(evm *EVM, contract *Contract, input []byte) {
 	defer func() { // 必须要先声明defer，否则不能捕获到panic异常
 		if err := recover(); err != nil {
-			Println("hacker_init")
-			Println(err) // 这里的err其实就是panic传入的内容，55
+			log.Println("hacker_init")
+			log.Println(err) // 这里的err其实就是panic传入的内容，55
 		}
 	}()
 	if hacker_env == nil || hacker_call_stack == nil {

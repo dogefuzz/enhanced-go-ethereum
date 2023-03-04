@@ -1,28 +1,34 @@
-FROM golang:1.10.2-alpine3.7 as builder
+# Support setting various labels on the final image
+ARG COMMIT=""
+ARG VERSION=""
+ARG BUILDNUM=""
 
-RUN apk add --update git go make gcc musl-dev linux-headers
+# Build Geth in a stock Go builder container
+FROM golang:1.20-alpine as builder
 
-# WORKDIR /instabul
+RUN apk add --no-cache gcc musl-dev linux-headers git
 
-# RUN git clone https://github.com/getamis/istanbul-tools.git /instabul
-# RUN make
-# RUN chmod a+rx /instabul/build/bin/istanbul
+# Get dependencies - will also be cached if we won't change go.mod/go.sum
+COPY go.mod /go-ethereum/
+COPY go.sum /go-ethereum/
+RUN cd /go-ethereum && go mod download
 
-WORKDIR /geth
-ADD . .
-RUN make geth
+ADD . /go-ethereum
+RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
 
-FROM alpine:3.7
+# Pull Geth into a second stage deploy alpine container
+FROM alpine:latest
 
-WORKDIR /app
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
+ADD entrypoint.sh .
 
-RUN apk add --update bash
-# COPY --from=builder /instabul/build/bin/instabul /usr/local/bin
-COPY --from=builder /geth/build/bin/geth /usr/local/bin/
-ADD entrypoint.sh  entrypoint.sh
-
-EXPOSE 8545
-EXPOSE 30303
-EXPOSE 30303/udp
-
+EXPOSE 8545 8546 30303 30303/udp
 ENTRYPOINT ["/bin/sh", "entrypoint.sh"]
+
+# Add some metadata labels to help programatic image consumption
+ARG COMMIT=""
+ARG VERSION=""
+ARG BUILDNUM=""
+
+LABEL commit="$COMMIT" version="$VERSION" buildnum="$BUILDNUM"
