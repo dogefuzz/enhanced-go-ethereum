@@ -10,7 +10,7 @@ import (
 )
 
 type InstrumentRequest struct {
-	Name         string   `json:"name"`
+	Address      string   `json:"address"`
 	Input        string   `json:"input"`
 	TxHash       string   `json:"txHash"`
 	Instructions []uint64 `json:"instructions"`
@@ -22,15 +22,15 @@ type ExecutionRegistry interface {
 }
 
 type executionRegistry struct {
-	name         string
+	address      string
 	input        string
 	txHash       string
 	instructions []uint64
 }
 
-func GetRegistryInstance(contractName string, input string, txHash string) *executionRegistry {
+func GetRegistryInstance(contractAddress string, input string, txHash string) *executionRegistry {
 	return &executionRegistry{
-		name:         contractName,
+		address:      contractAddress,
 		input:        input,
 		txHash:       txHash,
 		instructions: make([]uint64, 0, 3),
@@ -53,7 +53,7 @@ func (r *executionRegistry) SendRegistriesToFuzzer() {
 
 	url := fmt.Sprintf("http://%s:%s/transactions/executions", fuzzerHost, fuzzerPort)
 	request := InstrumentRequest{
-		Name:         r.name,
+		Address:      r.address,
 		Input:        r.input,
 		TxHash:       r.txHash,
 		Instructions: r.instructions,

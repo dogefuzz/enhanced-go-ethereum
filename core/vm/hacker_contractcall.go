@@ -69,6 +69,10 @@ type ExecutionMetadata struct {
 	Input  string `json:"input"`
 }
 
+type GetAgentResponse struct {
+	Address string `json:"address"`
+}
+
 func CallsPointerToString(calls []*HackerContractCall) string {
 	if len(calls) == 0 {
 		return ""
@@ -457,9 +461,24 @@ func hacker_close(txHash string) {
 			//contract = call.callee
 			call.OnCloseCall(*new(big.Int).SetUint64(0))
 		}
-		//The default Agent Contract's Address:"0xe930e50b62af818dbc955f345f9a3a3108f7a70d"
+
+		fuzzerHost := os.Getenv("FUZZER_HOST")
+		if fuzzerHost == "" {
+			fuzzerHost = "localhost"
+		}
+		fuzzerPort := os.Getenv("FUZZER_PORT")
+		if fuzzerPort == "" {
+			fuzzerPort = "8888"
+		}
+
+		address, err := getAgentAddress(fuzzerHost, fuzzerPort)
+		if err != nil {
+			log.Printf("error occured: %v\n", err)
+			return
+		}
+
 		//the contract could help us to exploit the underlying bugs such as reentrancy, or exception disorder check bug.
-		if strings.EqualFold(strings.TrimSpace(strings.ToLower(hacker_calls[0].callee.Hex())), strings.TrimSpace("0xe930e50b62af818dbc955f345f9a3a3108f7a70d")) {
+		if strings.EqualFold(strings.TrimSpace(strings.ToLower(hacker_calls[0].callee.Hex())), strings.TrimSpace(address)) {
 			var root int
 			for root = 1; root < len(hacker_calls); root++ {
 				if IsAccountAddress(hacker_calls[root].callee) {
@@ -468,6 +487,12 @@ func hacker_close(txHash string) {
 			}
 			hacker_call_hashs = hacker_call_hashs[root:]
 			hacker_calls = hacker_calls[root:]
+			log.Printf("Hacker Calls: %d", len(hacker_calls))
+		}
+
+		if len(hacker_calls) == 0 {
+			log.Printf("[ERROR] hacker call failed at %s", txHash)
+			return
 		}
 
 		oracles := make([]Oracle, 0, 0)
@@ -517,14 +542,6 @@ func hacker_close(txHash string) {
 			log.Println("error occured: %+v", err)
 		}
 
-		fuzzerHost := os.Getenv("FUZZER_HOST")
-		if fuzzerHost == "" {
-			fuzzerHost = "localhost"
-		}
-		fuzzerPort := os.Getenv("FUZZER_PORT")
-		if fuzzerPort == "" {
-			fuzzerPort = "8888"
-		}
 		// url := fmt.Sprintf("http://%s:%s/hack?%s", fuzzerHost, fuzzerPort, values.Encode())
 		url := fmt.Sprintf("http://%s:%s/transactions/weaknesses", fuzzerHost, fuzzerPort)
 		log.Printf("Calling %s\n", url)
@@ -537,4 +554,21 @@ func hacker_close(txHash string) {
 		defer resp.Body.Close()
 		log.Printf("oracle call finished with status: %d", resp.StatusCode)
 	}
+}
+
+func getAgentAddress(host, port string) (string, error) {
+	getAgentUrl := fmt.Sprintf("http://%s:%s/contracts/agent", host, port)
+	resp, err := http.Get(getAgentUrl)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var body GetAgentResponse
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	if err != nil {
+		return "", err
+	}
+
+	return body.Address, nil
 }
