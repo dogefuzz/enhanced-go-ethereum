@@ -76,6 +76,8 @@ echo "[2.1] Importing agent key"
 geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt agent.pkey 2> /dev/null
 geth init --datadir $ENV_FOLDER genesis.json
 
+# References:
+# - authrpc.vhosts: https://github.com/ethereum/go-ethereum/issues/16526
 echo "[3] Initializing node"
 geth \
     --syncmode "snap" \
@@ -84,7 +86,10 @@ geth \
     --http.addr "0.0.0.0" \
     --http.port "8545" \
     --http.corsdomain "*" \
-    --http.api "db,eth,net,web3,miner,net,personal,net,txpool,admin" \
+    --http.api "eth,net,web3" \
+    --http.vhosts "*" \
+    --rpc.allow-unprotected-txs \
+    --rpc.evmtimeout "30s" \
     --port "30303" \
     --nodiscover  \
     --networkid $NETWORK_ID \
