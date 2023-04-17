@@ -69,8 +69,8 @@ type ExecutionMetadata struct {
 	Input  string `json:"input"`
 }
 
-type GetAgentResponse struct {
-	Address string `json:"address"`
+type GetAgentsResponse struct {
+	Addresses []string `json:"addresses"`
 }
 
 func CallsPointerToString(calls []*HackerContractCall) string {
@@ -471,23 +471,26 @@ func hacker_close(txHash string) {
 			fuzzerPort = "8888"
 		}
 
-		address, err := getAgentAddress(fuzzerHost, fuzzerPort)
+		addresses, err := getAgentAddresses(fuzzerHost, fuzzerPort)
 		if err != nil {
 			log.Printf("error occured: %v\n", err)
 			return
 		}
 
-		//the contract could help us to exploit the underlying bugs such as reentrancy, or exception disorder check bug.
-		if strings.EqualFold(strings.TrimSpace(strings.ToLower(hacker_calls[0].callee.Hex())), strings.TrimSpace(address)) {
-			var root int
-			for root = 1; root < len(hacker_calls); root++ {
-				if IsAccountAddress(hacker_calls[root].callee) {
-					break
+		for _, address := range addresses {
+			//the contract could help us to exploit the underlying bugs such as reentrancy, or exception disorder check bug.
+			if strings.EqualFold(strings.TrimSpace(strings.ToLower(hacker_calls[0].callee.Hex())), strings.TrimSpace(address)) {
+				var root int
+				for root = 1; root < len(hacker_calls); root++ {
+					if IsAccountAddress(hacker_calls[root].callee) {
+						break
+					}
 				}
+				hacker_call_hashs = hacker_call_hashs[root:]
+				hacker_calls = hacker_calls[root:]
+				log.Printf("Hacker Calls: %d", len(hacker_calls))
+				break
 			}
-			hacker_call_hashs = hacker_call_hashs[root:]
-			hacker_calls = hacker_calls[root:]
-			log.Printf("Hacker Calls: %d", len(hacker_calls))
 		}
 
 		if len(hacker_calls) == 0 {
@@ -556,19 +559,19 @@ func hacker_close(txHash string) {
 	}
 }
 
-func getAgentAddress(host, port string) (string, error) {
+func getAgentAddresses(host, port string) ([]string, error) {
 	getAgentUrl := fmt.Sprintf("http://%s:%s/contracts/agent", host, port)
 	resp, err := http.Get(getAgentUrl)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var body GetAgentResponse
+	var body GetAgentsResponse
 	err = json.NewDecoder(resp.Body).Decode(&body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return body.Address, nil
+	return body.Addresses, nil
 }

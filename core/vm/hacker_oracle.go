@@ -17,8 +17,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-//This is a simple trick.
-//help us differentiate account address and memory address.
+// This is a simple trick.
+// help us differentiate account address and memory address.
 const prefixOfNoAccount = "0x00000000000000000000"
 
 func IsAccountAddress(addr common.Address) bool {
@@ -736,10 +736,12 @@ func (oracle *HackerStorageChanged) TestOracle() bool {
 	}
 	return ret
 }
+
 func (oracle *HackerStorageChanged) TriggerOracle(rootCall *HackerContractCall) bool {
-	rootStorage := rootCall.StateStack
-	ret, _ := rootStorage.Data()[0].Cmp(rootStorage.Data()[rootStorage.len()-1])
-	return ret != 0
+	return strings.Contains(rootCall.OperationStack.String(), opCodeToString[SSTORE])
+	// rootStorage := rootCall.StateStack
+	// ret, _ := rootStorage.Data()[0].Cmp(rootStorage.Data()[rootStorage.len()-1])
+	// return ret != 0
 }
 func (oracle *HackerStorageChanged) Write(writer io.Writer) {
 	str := ""
