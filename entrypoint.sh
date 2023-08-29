@@ -19,7 +19,7 @@ AGENT_WALLET_PRIVATE_KEY=${AGENT_WALLET_PRIVATE_KEY}
 AGENT_WALLET_BALANCE=${AGENT_WALLET_BALANCE}
 
 echo "[1] Generating genesis configuration"
-cat > instanbul.toml <<-END
+cat > istanbul.toml <<-END
 vanity = "0x00"
 validators = ["$NODE_WALLET_ADDRESS"]
 END
@@ -61,7 +61,7 @@ END
 
 mkdir -p $ENV_FOLDER
 
-echo "$PASSWORD" > $ENV_FOLDER/pwd.txt
+echo -n "$PASSWORD" > $ENV_FOLDER/pwd.txt
 echo "$NODE_WALLET_PRIVATE_KEY" > node.pkey
 echo "$DEPLOYER_WALLET_PRIVATE_KEY" > deployer.pkey
 echo "$AGENT_WALLET_PRIVATE_KEY" > agent.pkey
@@ -89,7 +89,7 @@ geth \
     --http.api "eth,net,web3" \
     --http.vhosts "*" \
     --rpc.allow-unprotected-txs \
-    --rpc.evmtimeout "30s" \
+    --rpc.evmtimeout "0" \
     --port "30303" \
     --nodiscover  \
     --networkid $NETWORK_ID \
@@ -98,10 +98,7 @@ geth \
     --dev.gaslimit "$GAS_LIMIT" \
     --dev \
     --allow-insecure-unlock \
-    --unlock $NODE_WALLET_ADDRESS \
+    --unlock "$DEPLOYER_WALLET_ADDRESS, $AGENT_WALLET_ADDRESS, $NODE_WALLET_ADDRESS" \
     --password "$ENV_FOLDER/pwd.txt" \
-    --mine
+    --fakepow
 
-echo "[4] Unlocking accounts"
-geth attach --exec "personal.unlockAccount('$DEPLOYER_WALLET_ADDRESS', '123456', 300)" http://0.0.0.0:8545/
-geth attach --exec "personal.unlockAccount('$AGENT_WALLET_ADDRESS', '123456', 300)" http://0.0.0.0:8545/
