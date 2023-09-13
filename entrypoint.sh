@@ -48,7 +48,7 @@ cat > genesis.json <<-END
       "epoch": 30000
     }
   },
-  "difficulty": "1",
+  "difficulty": "0x0",
   "gasLimit": "$GAS_LIMIT",
   "extradata": "0x0000000000000000000000000000000000000000000000000000000000000000${NODE_WALLET_ADDRESS#"0x"}0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
   "alloc": {
@@ -59,6 +59,8 @@ cat > genesis.json <<-END
 }
 END
 
+echo "[1.1] Cleaning up data dir"
+rm -fR $ENV_FOLDER
 mkdir -p $ENV_FOLDER
 
 echo -n "$PASSWORD" > $ENV_FOLDER/pwd.txt
@@ -70,9 +72,9 @@ echo "[2] Initializing first accounts for this node"
 
 echo "[2.1] Importing node key"
 geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt node.pkey 2> /dev/null
-echo "[2.1] Importing deployer key"
+echo "[2.2] Importing deployer key"
 geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt deployer.pkey 2> /dev/null
-echo "[2.1] Importing agent key"
+echo "[2.3] Importing agent key"
 geth account import --datadir $ENV_FOLDER --password $ENV_FOLDER/pwd.txt agent.pkey 2> /dev/null
 geth init --datadir $ENV_FOLDER genesis.json
 
